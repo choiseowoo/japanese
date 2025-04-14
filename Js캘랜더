@@ -1,0 +1,73 @@
+JSF + MyBatis 환경에서 `calender.xhtml` 화면을 `JavaScript`로 띄웠을 때, 해당 화면의 `@PostConstruct init()` 메소드가 동작하지 않는 문제는 보통 **JSF Lifecycle이 제대로 동작하지 않기 때문**입니다.
+
+### 1. 발생 원인 요약:
+- `calender.xhtml`을 자바스크립트로 `window.open()` 등으로 새 창으로 띄우는 경우, JSF는 새로운 request를 받아 처리하지만, 조건이 맞지 않으면 backing bean의 `@PostConstruct`가 실행되지 않습니다.
+- 특히 **JSF에서 `<f:view>`만 있고 `<h:form>`이나 `<h:body>`같은 JSF 컴포넌트가 없을 경우**, JSF Lifecycle이 제대로 타지 않아서 backing bean의 lifecycle 메소드가 실행되지 않을 수 있습니다.
+
+---
+
+### 2. 해결 방법
+
+#### [방법 A] `calender.xhtml`에 JSF 구성 요소 추가
+JSF lifecycle을 정상적으로 타게 하려면 최소한 아래와 같은 구조가 필요합니다:
+
+```xhtml
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="http://xmlns.jcp.org/jsf/html"
+      xmlns:f="http://xmlns.jcp.org/jsf/core">
+<h:head>
+    <title>Calendar</title>
+</h:head>
+<h:body>
+    <f:view>
+        <h:form>
+            <!-- Calendar UI goes here -->
+            <h:outputText value="#{calendarBean.someValue}" />
+        </h:form>
+    </f:view>
+</h:body>
+</html>
+```
+
+- `<h:form>` 또는 `<h:body>` 없이 `<f:view>`만 있으면 JSF가 제대로 동작하지 않음.
+- 최소한 JSF가 인식 가능한 컴포넌트 하나는 필요.
+
+---
+
+#### [방법 B] ViewScoped/RequestScoped Bean 확인
+- `@RequestScoped` 또는 `@ViewScoped`로 선언한 경우도 주의해야 합니다.
+- `@ViewScoped`는 ajax 요청 없이 페이지 새로 로딩만으로는 `@PostConstruct`가 안 불릴 수 있습니다.
+- 테스트로 `@RequestScoped`로 변경해보는 것도 한 방법입니다.
+
+```java
+@Named
+@RequestScoped
+public class CalendarBean {
+    @PostConstruct
+    public void init() {
+        System.out.println("CalendarBean initialized");
+        // 초기화 로직
+    }
+}
+```
+
+---
+
+#### [방법 C] JavaScript로 호출 시 파라미터 확인
+- JS에서 window.open으로 열 때 URL에 필요한 파라미터를 포함해 넘기고 있는지 확인하세요.
+- 예시:
+```javascript
+window.open('/yourapp/faces/page/calender.xhtml?date=2025-04-14', '_blank');
+```
+
+그 후, `init()`에서 `@ManagedProperty`나 `@Inject`, `FacesContext` 등을 통해 값을 받을 수 있도록 처리.
+
+---
+
+### 결론 요약
+`calender.xhtml`에서 `@PostConstruct`가 실행되지 않는 가장 큰 원인은 **JSF Lifecycle이 정상 작동하지 않기 때문이며**, 이를 해결하려면 **`<h:form>` 등의 JSF UI 컴포넌트를 포함**시켜야 합니다. 가능하면 해당 페이지를 정상적으로 구성해두고, 필요한 초기화 파라미터를 JS에서 넘겨서 `init()`에서 받는 방식이 좋습니다.
+
+---
+
+원하시면, 지금 사용하는 `calender.xhtml` 코드와 Bean을 보여주시면 더 정확하게 분석해드릴 수 있습니다.
